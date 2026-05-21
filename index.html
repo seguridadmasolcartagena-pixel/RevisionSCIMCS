@@ -182,6 +182,20 @@ body{font-family:'Titillium Web',sans-serif;background:var(--gray-50);color:var(
 .toast.err{background:var(--red)}
 ::-webkit-scrollbar{width:3px}
 ::-webkit-scrollbar-thumb{background:var(--gray-200);border-radius:2px}
+
+/* ── ADMIN ── */
+.admin-pin-input{background:var(--gray-50);border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);color:var(--gray-900);font-family:'Titillium Web',sans-serif;font-size:20px;font-weight:700;padding:14px 16px;width:100%;letter-spacing:3px;outline:none;text-align:center;}
+.admin-pin-input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(245,196,0,.15);}
+.admin-pos-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--gray-100);}
+.admin-pos-row:last-child{border-bottom:none;}
+.admin-pos-info{flex:1;min-width:0;}
+.admin-pos-name{font-weight:700;font-size:15px;color:var(--blue);}
+.admin-pos-type{font-size:11px;color:var(--gray-500);margin-top:1px;}
+.admin-toggle{display:flex;border:1.5px solid var(--gray-200);border-radius:8px;overflow:hidden;flex-shrink:0;}
+.admin-toggle button{border:none;padding:8px 14px;font-family:'Titillium Web',sans-serif;font-weight:700;font-size:13px;cursor:pointer;transition:all .15s;background:white;color:var(--gray-500);}
+.admin-toggle button.active-a{background:var(--green);color:white;}
+.admin-toggle button.active-c{background:var(--red);color:white;}
+.admin-group-hdr{background:var(--blue-light);border-left:3px solid var(--blue);padding:8px 14px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--blue);margin-top:2px;}
 </style>
 </head>
 <body>
@@ -235,6 +249,7 @@ body{font-family:'Titillium Web',sans-serif;background:var(--gray-50);color:var(
     </div>
     <button class="btn-secondary" onclick="showHistory()">📋 Historial de inspecciones</button>
     <button class="btn-secondary" style="margin-top:8px" onclick="openMap(null)">🗺️ Ver plano de planta</button>
+    <button class="btn-secondary" style="margin-top:8px;border-color:#F5C400;color:#7a6000;" onclick="openAdminLogin()">🔧 Cambiar estado de válvulas</button>
   </div>
 </div>
 
@@ -318,6 +333,39 @@ body{font-family:'Titillium Web',sans-serif;background:var(--gray-50);color:var(
       <button class="zoom-btn" onclick="mapZoom(0.6)">−</button>
       <button class="zoom-btn" onclick="mapZoom(1.4)">+</button>
     </div>
+  </div>
+</div>
+
+
+<!-- ═══ ADMIN LOGIN ═══ -->
+<div class="modal-overlay" id="modal-admin-login">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🔧 Acceso administrador</div>
+    <div class="modal-text">Introduce la clave para modificar el estado de las válvulas.</div>
+    <input id="admin-pin-input" class="admin-pin-input" type="password" placeholder="••••••••••••••••••" autocomplete="off">
+    <div id="admin-pin-error" style="color:var(--red);font-size:12px;margin-top:8px;display:none;">Clave incorrecta. Inténtalo de nuevo.</div>
+    <button class="btn-primary" style="margin-top:16px;margin-bottom:10px" onclick="checkAdminPin()">ACCEDER</button>
+    <button class="btn-secondary" onclick="closeAdminLogin()">Cancelar</button>
+  </div>
+</div>
+
+<!-- ═══ ADMIN PANEL ═══ -->
+<div id="screen-admin" class="screen">
+  <div class="app-header">
+    <button class="btn-back" onclick="showScreen('screen-home')">‹</button>
+    <div style="flex:1">
+      <div class="header-title">Estado de Válvulas</div>
+      <div class="header-sub">Modo administrador</div>
+    </div>
+    <div style="font-size:11px;color:rgba(255,255,255,.7);background:rgba(245,196,0,.2);padding:4px 10px;border-radius:6px;border:1px solid rgba(245,196,0,.4);">ADMIN</div>
+  </div>
+  <div style="background:var(--gold-light);border-bottom:1px solid var(--gold);padding:10px 16px;font-size:12px;color:#7a6000;font-weight:600;flex-shrink:0;">
+    ⚠️ Los cambios se guardan automáticamente y afectan a todas las inspecciones futuras.
+  </div>
+  <div style="flex:1;overflow-y:auto;padding-bottom:80px" id="admin-valve-list"></div>
+  <div style="position:fixed;bottom:0;left:0;right:0;background:white;border-top:1px solid var(--gray-100);padding:12px 16px;box-shadow:0 -4px 16px rgba(0,0,0,.08)">
+    <button class="btn-primary" onclick="saveAdminChanges()">✓ GUARDAR CAMBIOS Y SALIR</button>
   </div>
 </div>
 
@@ -507,7 +555,8 @@ function makeCard(v,gid,idx,r){
   const card=document.createElement('div');
   card.className=`valve-card ${r.status}`; card.id=`card-${key}`;
   const dN=v.n||'·', dItem=v.item||'—', dEq=v.eq||v.t;
-  const posLabel=v.pos==='A'?'ABIERTA':'CERRADA';
+  const effectivePos=getValvePos(v.item||v.t, v.pos);
+  const posLabel=effectivePos==='A'?'ABIERTA':'CERRADA';
   // Encode item for onclick safely
   const itemEnc=JSON.stringify(v.item||'');
   card.innerHTML=`
@@ -518,7 +567,7 @@ function makeCard(v,gid,idx,r){
         <div class="valve-equipo">${dEq}</div>
         <div class="valve-tipo">${v.t}</div>
       </div>
-      <span class="pos-badge ${v.pos}">${posLabel}</span>
+      <span class="pos-badge ${effectivePos}">${posLabel}</span>
     </div>
     <div class="precinto-row">
       <span class="precinto-lbl">Precinto actual:</span>
@@ -1051,6 +1100,122 @@ function showToast(msg,type=''){
   t.textContent=msg; t.className=`toast show ${type}`;
   if(_tt)clearTimeout(_tt);
   _tt=setTimeout(()=>t.classList.remove('show'),3500);
+}
+
+
+// ═══════════════════════════════════════
+// ADMIN — position state management
+// ═══════════════════════════════════════
+const ADMIN_PIN = '3430000009Masol123';
+
+// Load overrides from localStorage: { 'VH.01': 'C', 'VS.02': 'A', ... }
+function loadPosOverrides(){
+  return JSON.parse(localStorage.getItem('masol_pos_overrides')||'{}');
+}
+function savePosOverrides(overrides){
+  localStorage.setItem('masol_pos_overrides', JSON.stringify(overrides));
+}
+// Get effective position for a valve (override takes priority)
+function getValvePos(item, defaultPos){
+  const overrides = loadPosOverrides();
+  return overrides[item] !== undefined ? overrides[item] : defaultPos;
+}
+
+function openAdminLogin(){
+  document.getElementById('admin-pin-input').value='';
+  document.getElementById('admin-pin-error').style.display='none';
+  document.getElementById('modal-admin-login').classList.add('open');
+  setTimeout(()=>document.getElementById('admin-pin-input').focus(),200);
+}
+function closeAdminLogin(){
+  document.getElementById('modal-admin-login').classList.remove('open');
+}
+function checkAdminPin(){
+  const val = document.getElementById('admin-pin-input').value;
+  if(val === ADMIN_PIN){
+    closeAdminLogin();
+    openAdminPanel();
+  } else {
+    document.getElementById('admin-pin-error').style.display='block';
+    document.getElementById('admin-pin-input').value='';
+    document.getElementById('admin-pin-input').focus();
+  }
+}
+// Allow Enter key on pin input
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('admin-pin-input').addEventListener('keydown', e=>{
+    if(e.key==='Enter') checkAdminPin();
+  });
+});
+
+// Temporary admin state while editing
+let adminEdits = {};
+
+function openAdminPanel(){
+  adminEdits = {...loadPosOverrides()};
+  renderAdminList();
+  showScreen('screen-admin');
+}
+
+function renderAdminList(){
+  const list = document.getElementById('admin-valve-list');
+  list.innerHTML = '';
+  VALVE_GROUPS.forEach(g=>{
+    const hdr = document.createElement('div');
+    hdr.className = 'admin-group-hdr';
+    hdr.textContent = g.name;
+    list.appendChild(hdr);
+
+    const card = document.createElement('div');
+    card.style.cssText = 'background:white;margin-bottom:2px;border-radius:0;';
+    g.valves.forEach(v=>{
+      const currentPos = adminEdits[v.item] !== undefined ? adminEdits[v.item] : v.pos;
+      const label = v.item || v.t.substring(0,25);
+      const row = document.createElement('div');
+      row.className = 'admin-pos-row';
+      row.innerHTML = `
+        <div class="admin-pos-info">
+          <div class="admin-pos-name">${label}</div>
+          <div class="admin-pos-type">${v.eq||v.t}</div>
+        </div>
+        <div class="admin-toggle">
+          <button id="abtn-a-${label.replace(/[^a-z0-9]/gi,'_')}"
+            class="${currentPos==='A'?'active-a':''}"
+            onclick="setAdminPos('${label.replace(/'/g,"\'")}','A')">ABIERTA</button>
+          <button id="abtn-c-${label.replace(/[^a-z0-9]/gi,'_')}"
+            class="${currentPos==='C'?'active-c':''}"
+            onclick="setAdminPos('${label.replace(/'/g,"\'")}','C')">CERRADA</button>
+        </div>`;
+      card.appendChild(row);
+    });
+    list.appendChild(card);
+  });
+}
+
+function setAdminPos(item, pos){
+  adminEdits[item] = pos;
+  // Update button styles
+  const key = item.replace(/[^a-z0-9]/gi,'_');
+  const btnA = document.getElementById('abtn-a-'+key);
+  const btnC = document.getElementById('abtn-c-'+key);
+  if(btnA){ btnA.className = pos==='A'?'active-a':''; }
+  if(btnC){ btnC.className = pos==='C'?'active-c':''; }
+}
+
+function saveAdminChanges(){
+  // Only save actual changes (where pos differs from original)
+  const finalOverrides = {};
+  VALVE_GROUPS.forEach(g=>{
+    g.valves.forEach(v=>{
+      const edited = adminEdits[v.item||v.t];
+      if(edited !== undefined && edited !== v.pos){
+        finalOverrides[v.item||v.t] = edited;
+      }
+    });
+  });
+  savePosOverrides(finalOverrides);
+  showScreen('screen-home');
+  showToast('✓ Estados de válvulas actualizados','ok');
 }
 
 if('serviceWorker' in navigator){
